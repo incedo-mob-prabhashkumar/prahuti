@@ -1,0 +1,44 @@
+FROM php:8.0-apache
+
+# Enable Apache Rewrite (required for Laravel/Bagisto routing)
+RUN a2enmod rewrite
+
+# System dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    unzip \
+    libicu-dev \
+    libzip-dev \
+    libpng-dev \
+    libjpeg62-turbo-dev \
+    libfreetype6-dev \
+    && docker-php-ext-configure intl \
+    && docker-php-ext-install intl pdo pdo_mysql zip gd
+
+# Install Composer
+COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
+
+# Set working directory
+WORKDIR /var/www/html
+
+# Copy project files
+COPY . .
+
+# Install PHP dependencies
+RUN composer install --no-dev --optimize-autoloader
+
+# Make storage accessible
+RUN php artisan storage:link || true
+
+# Set permissions for Laravel
+RUN chown -R www-data:www-data /var/www/html/storage \
+    /var/www/html/bootstrap/cache
+
+# Set Apache DocumentRoot to public folder
+ENV APACHE_DOCUMENT_ROOT /var/www/html/public
+RUN sed -ri -e 's!/var/www/html!/var/www/html/public!g' /etc/apache2/sites-available/*.conf
+
+# Expose port (Railway dynamically maps this)
+EXPOSE 80
+
+CMD ["apache2-foreground"]
